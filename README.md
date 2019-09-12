@@ -87,6 +87,27 @@ In reality, the plugin will take _any_ properties defined in your
 Scala-version profile and interpolate them into group and artifact IDs
 in the rest of the POM.
 
+For reference, here's an example of some profiles you might use:
+
+```xml
+<profiles>
+  <profile>
+    <id>scala-2.11</id>
+    <properties>
+      <scala.binary.version>2.11</scala.binary.version>
+      <scala.version>2.11.12</scala.version>
+    </profiles>
+  </profile>
+  <profile>
+    <id>scala-2.12</id>
+    <properties>
+      <scala.binary.version>2.12</scala.binary.version>
+      <scala.version>2.12.10</scala.version>
+    </profiles>
+  </profile>
+</profiles>
+```
+
 ## Configuration
 
 There are a few settings you can use to tailor execution to your

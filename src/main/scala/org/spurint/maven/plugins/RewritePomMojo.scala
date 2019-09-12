@@ -192,8 +192,10 @@ class RewritePomMojo extends AbstractMojo {
   }
 
   private def interpolateProperties(model: Model, properties: Properties): Unit = {
-    model.getParent.setGroupId(interpolate(properties, model.getParent.getGroupId))
-    model.getParent.setArtifactId(interpolate(properties, model.getParent.getArtifactId))
+    Option(model.getParent).foreach({ parent =>
+      parent.setGroupId(interpolate(properties, parent.getGroupId))
+      parent.setArtifactId(interpolate(properties, parent.getArtifactId))
+    })
     model.setGroupId(interpolate(properties, model.getGroupId))
     model.setArtifactId(interpolate(properties, model.getArtifactId))
 

@@ -51,10 +51,10 @@ convention like so:
 * You have artifact (and possibly group) IDs that require the
   binary/compat version to be interpolated into them.
 * You do _not_ put defaults for the above properties in the POM's
-  main properties section.  (Stricly, you _can_ do this, and things will
-  likely work ok, but I would not recommend it.  It's better to require
-  that developers be explicit when running Maven so they get the output
-  they expect.)
+  main properties section.  (Note: Some IDEs, like IntelliJ IDEA, won't
+  work properly without a default for `scala.binary.version`, even if
+  you properly select the correct profile to use.  Adding a default for
+  that property seems to work ok.)
 
 If you've fulfilled the above, you can just do the following:
 

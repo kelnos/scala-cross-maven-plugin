@@ -9,6 +9,7 @@ import org.apache.maven.plugin.{AbstractMojo, MojoExecutionException, MojoFailur
 import org.apache.maven.plugins.annotations.{LifecyclePhase, Mojo, Parameter}
 import org.apache.maven.project.MavenProject
 import scala.collection.JavaConverters._
+import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
 object RewritePomMojo {
@@ -39,14 +40,12 @@ class RewritePomMojo extends AbstractMojo {
 
     val scalaProfileId = Option(this.scalaProfileId)
       .orElse(this.project.getActiveProfiles.asInstanceOf[util.List[Profile]].asScala.find(_.getId.startsWith(this.scalaProfilePrefix)).map(_.getId))
-    val scalaProfile = findProfile(this.project, scalaProfileId)
       .getOrElse(
-        scalaProfileId.fold(
-          throw new MojoExecutionException("Unable to determine scala profile; try setting -DscalaProfilePrefix or -DscalaProfileId")
-        )(id =>
-          throw new MojoExecutionException(s"Profile with ID '$id' does not exist")
-        )
+        throw new MojoExecutionException("Unable to determine scala profile; try setting -DscalaProfilePrefix or -DscalaProfileId")
       )
+    val scalaProfile = findProfile(this.project, scalaProfileId).getOrElse(
+      throw new MojoExecutionException(s"Profile with ID '$scalaProfileId' does not exist")
+    )
     getLog.info(s"Using profile '${scalaProfile.getId}'")
 
     val scalaProperties = scalaProfile.getProperties
@@ -92,46 +91,71 @@ class RewritePomMojo extends AbstractMojo {
     }
   }
 
-  private def findProfile(project: MavenProject, id: Option[String]): Option[Profile] = {
-    id.fold(
-      project.getActiveProfiles.asInstanceOf[util.List[Profile]].asScala.find(_.getId.startsWith("scala-"))
-    )(id =>
-      project.getModel.getProfiles.asScala.find(_.getId == id)
-    ).orElse(Option(project.getParent).flatMap(findProfile(_, id)))
+  private def accumulateProfiles(project: MavenProject, id: String): List[Profile] = {
+    def rec(profiles: List[Profile], curProject: MavenProject): List[Profile] = {
+      val moreProfiles = curProject.getModel.getProfiles.asScala.find(_.getId == id).fold(profiles)(_ :: profiles)
+      Option(curProject.getParent).fold(moreProfiles)(rec(moreProfiles, _))
+    }
+    rec(Nil, project)
   }
 
-  private def mergeSections(model: Model, profile: Profile): Unit = {
-    profile.getModules.asScala.foreach(model.addModule)
+  private def findProfile(project: MavenProject, id: String): Option[Profile] = {
+    accumulateProfiles(project, id) match {
+      case Nil =>
+        None
+      case first :: rest =>
+        val accum = first.clone()
+        rest.foreach(next => mergeSections(accum, next.clone()))
+        Option(accum)
+    }
+  }
+
+  private type ProfileOrModel = {
+    def getClass(): Class[_]
+    def addModule(module: String): Unit
+    def addProperty(key: String, value: String): Unit
+    def setDistributionManagement(distMgmt: DistributionManagement): Unit
+    def addRepository(repo: Repository): Unit
+    def addPluginRepository(repo: Repository): Unit
+    def getDependencyManagement(): DependencyManagement
+    def setDependencyManagement(depMgmt: DependencyManagement): Unit
+    def addDependency(dep: Dependency): Unit
+    def getReporting(): Reporting
+    def setReporting(reporting: Reporting): Unit
+  }
+
+  private def mergeSections(pom: ProfileOrModel, profile: Profile): Unit = {
+    profile.getModules.asScala.foreach(pom.addModule)
     profile.setModules(null)
 
-    profile.getProperties.asScala.foreach({ case (k, v) => model.addProperty(k, v) })
+    profile.getProperties.asScala.foreach({ case (k, v) => pom.addProperty(k, v) })
     profile.setProperties(null)
 
     Option(profile.getDistributionManagement).foreach({ distmgmt =>
-      model.setDistributionManagement(distmgmt)
+      pom.setDistributionManagement(distmgmt)
       profile.setDistributionManagement(null)
     })
 
-    profile.getRepositories.asScala.foreach(model.addRepository)
+    profile.getRepositories.asScala.foreach(pom.addRepository)
     profile.setRepositories(null)
-    profile.getPluginRepositories.asScala.foreach(model.addPluginRepository)
+    profile.getPluginRepositories.asScala.foreach(pom.addPluginRepository)
     profile.setPluginRepositories(null)
 
     Option(profile.getDependencyManagement).foreach({ depMgmt =>
-      Option(model.getDependencyManagement).fold(
-        model.setDependencyManagement(depMgmt)
+      Option(pom.getDependencyManagement()).fold(
+        pom.setDependencyManagement(depMgmt)
       )(
         modelDepMgmt => depMgmt.getDependencies.asScala.foreach(modelDepMgmt.addDependency)
       )
       profile.setDependencyManagement(null)
     })
 
-    profile.getDependencies.asScala.foreach(model.addDependency)
+    profile.getDependencies.asScala.foreach(pom.addDependency)
     profile.setDependencies(null)
 
     Option(profile.getReporting).foreach({ profileReporting =>
-      Option(model.getReporting).fold(
-        model.setReporting(profileReporting)
+      Option(pom.getReporting()).fold(
+        pom.setReporting(profileReporting)
       )({ modelReporting =>
         Option(profileReporting.getExcludeDefaults).foreach({ defaults =>
           modelReporting.setExcludeDefaults(defaults)
@@ -149,10 +173,15 @@ class RewritePomMojo extends AbstractMojo {
     })
 
     Option(profile.getBuild).foreach({ profileBuild =>
-      val modelBuild = Option(model.getBuild).getOrElse({
-        model.setBuild(new Build)
-        model.getBuild
-      })
+      // Annoyingly necessary because Model returns a Build and Profile
+      // returns a BuildBase, but scala strucutral types don't seem to
+      // be up to the task of allowing me to use type bounds in a useful
+      // way here.
+      val modelBuild = pom match {
+        case m: Model => Option(m.getBuild).getOrElse({ m.setBuild(new Build); m.getBuild })
+        case p: Profile => Option(p.getBuild).getOrElse({ p.setBuild(new Build); p.getBuild })
+        case x => throw new AssertionError(s"BUG: Unexpected type ${x.getClass().getName} passsed to mergeSections()")
+      }
 
       Option(profileBuild.getPluginManagement).foreach({ pluginMgmt =>
         val modelPluginMgmt = Option(modelBuild.getPluginManagement).getOrElse({

@@ -39,7 +39,7 @@ class RewritePomMojo extends AbstractMojo {
     val model = loadModelFromScratch(this.project.getModel)
 
     val scalaProfileId = Option(this.scalaProfileId)
-      .orElse(this.project.getActiveProfiles.asInstanceOf[util.List[Profile]].asScala.find(_.getId.startsWith(this.scalaProfilePrefix)).map(_.getId))
+      .orElse(guessProfileId(this.project))
       .getOrElse(
         throw new MojoExecutionException("Unable to determine scala profile; try setting -DscalaProfilePrefix or -DscalaProfileId")
       )
@@ -89,6 +89,13 @@ class RewritePomMojo extends AbstractMojo {
     } finally {
       input.close()
     }
+  }
+
+  private def guessProfileId(project: MavenProject): Option[String] = {
+    project.getActiveProfiles.asInstanceOf[util.List[Profile]].asScala
+      .find(_.getId.startsWith(this.scalaProfilePrefix))
+      .map(_.getId)
+      .orElse(Option(project.getParent).flatMap(guessProfileId))
   }
 
   private def accumulateProfiles(project: MavenProject, id: String): List[Profile] = {

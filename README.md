@@ -96,14 +96,14 @@ For reference, here's an example of some profiles you might use:
     <properties>
       <scala.binary.version>2.11</scala.binary.version>
       <scala.version>2.11.12</scala.version>
-    </profiles>
+    </properties>
   </profile>
   <profile>
     <id>scala-2.12</id>
     <properties>
       <scala.binary.version>2.12</scala.binary.version>
       <scala.version>2.12.10</scala.version>
-    </profiles>
+    </properties>
   </profile>
 </profiles>
 ```

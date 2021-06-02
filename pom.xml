@@ -6,7 +6,7 @@
 
   <groupId>org.spurint.maven.plugins</groupId>
   <artifactId>scala-cross-maven-plugin</artifactId>
-  <version>0.2.2-SNAPSHOT</version>
+  <version>0.3.0</version>
   <packaging>maven-plugin</packaging>
 
   <name>Scala Cross Maven Plugin</name>
@@ -32,7 +32,7 @@
     <connection>scm:git:https://github.com/kelnos/scala-cross-maven-plugin</connection>
     <developerConnection>scm:git:git@github.com:kelnos/scala-cross-maven-plugin.git</developerConnection>
     <url>https://github.com/kelnos/scala-cross-maven-plugin</url>
-    <tag>HEAD</tag>
+    <tag>v0.3.0</tag>
   </scm>
 
   <distributionManagement>

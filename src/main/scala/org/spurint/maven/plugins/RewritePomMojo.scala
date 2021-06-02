@@ -43,7 +43,7 @@ class RewritePomMojo extends AbstractMojo {
       .getOrElse(
         throw new MojoExecutionException("Unable to determine scala profile; try setting -DscalaProfilePrefix or -DscalaProfileId")
       )
-    val scalaProfile = findProfile(this.project, scalaProfileId).getOrElse(
+    val scalaProfile = findProfile(scalaProfileId).getOrElse(
       throw new MojoExecutionException(s"Profile with ID '$scalaProfileId' does not exist")
     )
     getLog.info(s"Using profile '${scalaProfile.getId}'")
@@ -98,24 +98,34 @@ class RewritePomMojo extends AbstractMojo {
       .orElse(Option(project.getParent).flatMap(guessProfileId))
   }
 
-  private def accumulateProfiles(project: MavenProject, id: String): List[Profile] = {
-    def rec(profiles: List[Profile], curProject: MavenProject): List[Profile] = {
-      val moreProfiles = curProject.getModel.getProfiles.asScala.find(_.getId == id).fold(profiles)(_ :: profiles)
-      Option(curProject.getParent).fold(moreProfiles)(rec(moreProfiles, _))
-    }
-    rec(Nil, project)
+
+  private def findProfile(id: String): Option[Profile] = {
+    val ourProfile = findProfile(this.project, id)
+    val parentProfiles = accumulateParentProfiles(this.project, id)
+    (ourProfile.toList ++ parentProfiles).foldLeft(Option.empty[Profile])({
+      case (Some(accum), next) => Some(mergeSections(accum, next.clone()))
+      case (None, next) => Some(next.clone())
+    })
   }
 
-  private def findProfile(project: MavenProject, id: String): Option[Profile] = {
-    accumulateProfiles(project, id) match {
-      case Nil =>
-        None
-      case first :: rest =>
-        val accum = first.clone()
-        rest.foreach(next => mergeSections(accum, next.clone()))
-        Option(accum)
-    }
+  private def accumulateParentProfiles(project: MavenProject, id: String): List[Profile] = {
+    Option(project.getParent).fold(List.empty[Profile])({
+      parent =>
+        val parentProfile = findProfile(parent, id).map(_.clone())
+        parentProfile.foreach({ pp =>
+          // These need to be unset because they shouldn't be emitted into the flattened POM
+          pp.setBuild(null)
+          pp.setDependencies(null)
+          pp.setDependencyManagement(null)
+          pp.setModules(null)
+          pp.setReporting(null)
+        })
+        parentProfile.toList ++ accumulateParentProfiles(parent, id)
+    })
   }
+
+  private def findProfile(project: MavenProject, id: String): Option[Profile] =
+    project.getModel.getProfiles.asScala.find(_.getId == id)
 
   private type ProfileOrModel = {
     def getClass(): Class[_]
@@ -131,7 +141,7 @@ class RewritePomMojo extends AbstractMojo {
     def setReporting(reporting: Reporting): Unit
   }
 
-  private def mergeSections(pom: ProfileOrModel, profile: Profile): Unit = {
+  private def mergeSections[T <: ProfileOrModel](pom: T, profile: Profile): T = {
     profile.getModules.asScala.foreach(pom.addModule)
     profile.setModules(null)
 
@@ -225,6 +235,8 @@ class RewritePomMojo extends AbstractMojo {
       profileBuild.getFilters.asScala.foreach(modelBuild.addFilter)
       profileBuild.setFilters(null)
     })
+
+    pom
   }
 
   private def interpolateProperties(model: Model, properties: Properties): Unit = {

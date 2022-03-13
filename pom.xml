@@ -47,7 +47,7 @@
     <maven-plugin-annotations.version>3.6.0</maven-plugin-annotations.version>
     <maven-plugin-api.version>3.6.3</maven-plugin-api.version>
     <maven-plugin-plugin.version>3.6.0</maven-plugin-plugin.version>
-    <maven-project.version>3.0-alpha-2</maven-project.version>
+    <maven-project.version>3.8.5</maven-project.version>
     <plexus-utils.version>3.3.0</plexus-utils.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scala.version>2.12.10</scala.version>
